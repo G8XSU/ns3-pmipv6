@@ -55,7 +55,8 @@ public:
   Pmipv6Profile();
   ~Pmipv6Profile();
   
-  Entry *LookupMnId (Identifier id);
+  //Entry *LookupMnId (Identifier id);
+  Entry* LookupMnId (Identifier id);
   Entry *LookupMnLinkId (Identifier id);
   Entry *LookupImsi (uint64_t imsi);
   Entry *AddMnId (Identifier id, Entry *entry = NULL);

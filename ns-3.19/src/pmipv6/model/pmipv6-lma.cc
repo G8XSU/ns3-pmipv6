@@ -461,6 +461,7 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
 
 					  bce->MarkReachable ();
 					  // start lifetime timer
+					  bce->StopReachableTimer ();
 					  bce->StartReachableTimer ();
                   }
                 } // PBU from another MAG.
