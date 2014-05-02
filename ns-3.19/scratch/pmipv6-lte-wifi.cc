@@ -342,10 +342,10 @@ main (int argc, char *argv[])
   profile->AddProfile (Identifier ("node1@iith.ac.in"), Identifier (Mac48Address::ConvertFrom(ueLteNetDev->GetAddress())), pgwInternetAddr, std::list<Ipv6Address> (), ueLteNetDev->GetImsi ());
 
   // Enable PCAP traces
-  p2ph.EnablePcapAll ("lte-pmipv6");
+  p2ph.EnablePcapAll ("lte-pmipv6-p2p");
   epcHelper->EnablePcap ("lte-pmipv6", ueLteDev);
   epcHelper->EnablePcap ("lte-pmipv6", enbLteDev);
-  wifiPhy.EnablePcap ("lte-pmipv6", wifiApDev);
+  wifiPhy.EnablePcap ("lte-pmipv6-wifi", wifiApDev);
 
   // Add IP traces to all nodes.
   Config::Connect ("/NodeList/*/$ns3::Ipv6L3Protocol/Rx", MakeCallback (&RxTrace));

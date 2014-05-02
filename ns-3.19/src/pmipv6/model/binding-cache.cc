@@ -242,7 +242,21 @@ bool BindingCache::Entry::IsUnreachable() const
 
   return m_state == UNREACHABLE;  
 }
-
+bool BindingCache::Entry::IsEqual (BindingCache::Entry *bceToCheck){
+  NS_LOG_FUNCTION_NOARGS();
+  /*
+   * checking
+   * 1. att
+   * 2. LastBindingUpdateSequence
+   * 3.MagLinkAddress
+   * 4.LastbindingUpdateTime
+   * 5.HNPsList
+   */
+  if(bceToCheck->GetAccessTechnologyType()==this->GetAccessTechnologyType() && bceToCheck->GetLastBindingUpdateSequence()==this->GetLastBindingUpdateSequence() && bceToCheck->GetMagLinkAddress()==this->GetMagLinkAddress() && bceToCheck->GetLastBindingUpdateTime()==this->GetLastBindingUpdateTime() && bceToCheck->GetHomeNetworkPrefixes()==this->GetHomeNetworkPrefixes())
+	  return true;
+  else
+	  return false;
+}
 bool BindingCache::Entry::IsDeregistering() const
 {
   NS_LOG_FUNCTION_NOARGS();
@@ -476,6 +490,7 @@ void BindingCache::Entry::SetProxyCoa(Ipv6Address pcoa)
 
   m_oldProxyCoa = m_proxyCoa;
   m_proxyCoa = pcoa;
+  return;
 }
 
 int16_t BindingCache::Entry::GetTunnelIfIndex() const
