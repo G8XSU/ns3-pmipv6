@@ -225,6 +225,61 @@ Ptr<Packet> Pmipv6Lma::BuildPba(Ipv6MobilityBindingUpdateHeader pbu, Ipv6Mobilit
   return p;
 }
 
+Ptr<Packet> Pmipv6Lma::BuildHur (BindingCache::Entry *bce_new, uint8_t status)
+{
+NS_LOG_FUNCTION (this << bce_new << status);
+
+ Ptr<Packet> p = Create<Packet> ();
+
+ Ipv6MobilityBindingAckHeader hur;
+
+ Ipv6MobilityOptionMobileNodeIdentifierHeader MnIdh;
+ Ipv6MobilityOptionHomeNetworkPrefixHeader hnph;
+ Ipv6MobilityOptionAccessTechnologyTypeHeader atth;
+ Ipv6MobilityOptionMobileNodeLinkLayerIdentifierHeader mnllidh;
+ Ipv6MobilityOptionTimestampHeader timestamph;
+
+ hur.SetStatus (status);
+ hur.SetFlagP (true);
+ hur.SetFlagK(true);
+ //hur.SetFlagT(true);                                                        //Remember to Set T FLAG
+ //hur.SetFlagA(true);
+ hur.SetSequence (bce_new->GetLastBindingUpdateSequence ());
+ hur.SetLifetime ((uint16_t)bce_new->GetReachableTime ().GetSeconds ());
+
+ MnIdh.SetSubtype (1);
+ MnIdh.SetNodeIdentifier (bce_new->GetMnIdentifier ());
+ hur.AddOption (MnIdh);
+
+ //HOW MANY HNP'S?
+ //std::list<Ipv6Address> hnpList = bce->GetHomeNetworkPrefixes();
+ /*std::list<Ipv6Address> hnpList;
+ hnpList.push_back(bce->GetHomeNetworkPrefixes().back()); //sending last added hnp
+ for (std::list<Ipv6Address>::iterator i = hnpList.begin (); i != hnpList.end(); i++)
+   {
+     hnph.SetPrefix ((*i));
+     hnph.SetPrefixLength (64);
+     hur.AddOption (hnph);
+   }*/
+
+ hnph.SetPrefix (bce_new->GetHomeNetworkPrefixes().back());
+ hnph.SetPrefixLength (64);
+ hur.AddOption (hnph);
+
+
+ atth.SetAccessTechnologyType (bce_new->GetAccessTechnologyType ());
+ hur.AddOption (atth);
+
+ mnllidh.SetLinkLayerIdentifier (bce_new->GetMnLinkIdentifier ());
+ hur.AddOption (mnllidh);
+
+ timestamph.SetTimestamp (bce_new->GetLastBindingUpdateTime ());
+ hur.AddOption (timestamph);
+
+ p->AddHeader (hur);
+ return p;
+}
+
 uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface)
 {
   NS_LOG_FUNCTION (this << packet << src << dst << interface);
@@ -245,6 +300,7 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
   
   uint8_t errStatus = 0;
   BindingCache::Entry *bce = 0;
+  BindingCache::Entry *bce_new = 0;
   Pmipv6Profile::Entry *pf = 0;
   bool Another_Interface_Att = false;
   bool delayedRegister = false;
@@ -434,35 +490,45 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
                       
                       //start lifetime timer
                       bce->StopReachableTimer ();
-                      bce->StartReachableTimer ();                      
+                      bce->StartReachableTimer ();
                     }
                   else if(bce->GetAccessTechnologyType()!=bundle.GetAccessTechnologyType ())
                   {
                 	  NS_LOG_LOGIC ("Another interface of same node connected to Another MAG");
                 	  Another_Interface_Att=true;
 
-                	  bce->SetMagLinkAddress (bundle.GetMagLinkAddress ());
-                	  bce->SetLastBindingUpdateTime (bundle.GetTimestamp ());
-                	  bce->SetReachableTime (Seconds (pbu.GetLifetime ()));
-                	  bce->SetLastBindingUpdateSequence (pbu.GetSequence ());
+                      NS_LOG_LOGIC ("Creating new Binding Cache Entry");
 
-                	  std::list<Ipv6Address> hnpList=bce->GetHomeNetworkPrefixes();
-                	  Ipv6Address prefix = m_prefixPool->Assign ();
+                      //bce_new = m_bCache->Add (mnId);
+                      bce_new=m_bCache->Add(bce->GetMnIdentifier());
+                      //bce_new = new BindingCache::Entry(m_bCache);
+                      bce_new->SetProxyCoa (src);
+                      bce_new->SetMnLinkIdentifier (mnLinkId);
+                      bce_new->SetAccessTechnologyType (bundle.GetAccessTechnologyType ());
+                      bce_new->SetHandoffIndicator (bundle.GetHandoffIndicator ());
+                      bce_new->SetMagLinkAddress (bundle.GetMagLinkAddress ());
+                      bce_new->SetLastBindingUpdateTime (bundle.GetTimestamp ());
+                      bce_new->SetReachableTime (Seconds (pbu.GetLifetime ()));
+                      bce_new->SetLastBindingUpdateSequence (pbu.GetSequence ());
+
+                      std::list<Ipv6Address> hnpList=bce->GetHomeNetworkPrefixes();
+					  Ipv6Address prefix = m_prefixPool->Assign ();
 					  NS_LOG_LOGIC ("Assign new Prefix for another interface from Pool: " << prefix);
 					  hnpList.push_back (prefix);
-					  bce->SetHomeNetworkPrefixes (hnpList);
-					  // Assign the HNPs to Profile as well.
+					  bce_new->SetHomeNetworkPrefixes (hnpList);
 					  if (pf)
 					  {
 						pf->SetHomeNetworkPrefixes (hnpList);
 					  }
+					  SetupTunnelAndRouting (bce_new);
 
-					  SetupTunnelAndRouting (bce);
-
-					  bce->MarkReachable ();
+					  bce_new->MarkReachable ();
+					  bce->SetNext(bce_new);
 					  // start lifetime timer
-					  bce->StopReachableTimer ();
-					  bce->StartReachableTimer ();
+					  bce_new->StopReachableTimer ();
+					  bce_new->StartReachableTimer ();
+
+
                   }
                 } // PBU from another MAG.
             } // PBU lifetime > 0.
@@ -537,7 +603,17 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
   else if(bce != 0 && Another_Interface_Att)
   {
 	  //send pba with two hnp
-	  pktPba = BuildPba (bce, errStatus);
+	  pktPba = BuildPba (bce_new, errStatus);
+	  SendMessage (pktPba, src, 64);
+	  //for all previous mags send hur
+	  Ptr<Packet> pktHur=BuildHur(bce_new,errStatus);
+	  BindingCache::Entry *bce_iterator=bce_new->GetNext();
+	  NS_LOG_LOGIC("Sending HURs to all MAGs");
+	  while(bce_iterator !=NULL && bce_iterator !=0 && !(bce_iterator->IsEqual(bce_new))){
+		  SendMessage (pktHur, bce_iterator->GetMagLinkAddress(), 64);
+		  bce_iterator=bce_iterator->GetNext();
+	  }
+	  return 0;
   }
   else
     {

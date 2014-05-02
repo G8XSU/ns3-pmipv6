@@ -133,7 +133,7 @@ void Pmipv6Agent::SendMessage (Ptr<Packet> packet, Ipv6Address dst, uint32_t ttl
   
   Ptr<Ipv6L3Protocol> ipv6 = m_node->GetObject<Ipv6L3Protocol> ();
   NS_ASSERT (ipv6 != 0 && ipv6->GetRoutingProtocol () != 0);
-  
+  NS_LOG_FUNCTION(packet->GetSerializedSize());
   Ipv6Header header;
   SocketIpTtlTag tag;
   Socket::SocketErrno err;

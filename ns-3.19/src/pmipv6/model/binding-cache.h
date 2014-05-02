@@ -66,6 +66,7 @@ public:
   BindingCache::Entry *Lookup (Identifier mnId, std::list<Ipv6Address> hnpList, bool &allMatched);
   BindingCache::Entry *Lookup (Identifier mnId, uint8_t att, Identifier mnLinkId);
   BindingCache::Entry *Lookup (Identifier mnId);
+  bool *IsEqual (BindingCache::Entry *bceToCheck);
   /**
    * \brief Adds a Binding Cache Entry based on the key MN Id. If an entry with the MN Id already
    * exists, a linked list is created with the new entry as the head of the linked list.
@@ -92,6 +93,7 @@ public:
     bool IsDeregistering() const;
     bool IsRegistering() const;
     bool IsReachable() const;
+    bool IsEqual (BindingCache::Entry *bceToCheck);
     
     void MarkUnreachable();
     void MarkDeregistering();
