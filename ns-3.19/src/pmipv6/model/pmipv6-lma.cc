@@ -225,9 +225,9 @@ Ptr<Packet> Pmipv6Lma::BuildPba(Ipv6MobilityBindingUpdateHeader pbu, Ipv6Mobilit
   return p;
 }
 
-Ptr<Packet> Pmipv6Lma::BuildHur (BindingCache::Entry *bce_new, uint8_t status)
+Ptr<Packet> Pmipv6Lma::BuildHur (BindingCache::Entry *bce_new,BindingCache::Entry *bce_old, uint8_t status)
 {
-NS_LOG_FUNCTION (this << bce_new << status);
+NS_LOG_FUNCTION (this << bce_new<<"  "<<bce_old << status);
 
  Ptr<Packet> p = Create<Packet> ();
 
@@ -242,13 +242,13 @@ NS_LOG_FUNCTION (this << bce_new << status);
  hur.SetStatus (status);
  hur.SetFlagP (true);
  hur.SetFlagK(true);
- //hur.SetFlagT(true);                                                        //Remember to Set T FLAG
+ hur.SetFlagT(true);
  //hur.SetFlagA(true);
- hur.SetSequence (bce_new->GetLastBindingUpdateSequence ());
- hur.SetLifetime ((uint16_t)bce_new->GetReachableTime ().GetSeconds ());
+ hur.SetSequence (bce_old->GetLastBindingUpdateSequence ());
+ hur.SetLifetime ((uint16_t)bce_old->GetReachableTime ().GetSeconds ());
 
  MnIdh.SetSubtype (1);
- MnIdh.SetNodeIdentifier (bce_new->GetMnIdentifier ());
+ MnIdh.SetNodeIdentifier (bce_old->GetMnIdentifier ());
  hur.AddOption (MnIdh);
 
  //HOW MANY HNP'S?
@@ -261,19 +261,19 @@ NS_LOG_FUNCTION (this << bce_new << status);
      hnph.SetPrefixLength (64);
      hur.AddOption (hnph);
    }*/
-
- hnph.SetPrefix (bce_new->GetHomeNetworkPrefixes().back());
+ list <Ipv6Address>::iterator iter = bce_new->GetHomeNetworkPrefixes().end();
+ hnph.SetPrefix (*(--iter));
  hnph.SetPrefixLength (64);
  hur.AddOption (hnph);
 
 
- atth.SetAccessTechnologyType (bce_new->GetAccessTechnologyType ());
+ atth.SetAccessTechnologyType (bce_old->GetAccessTechnologyType ());
  hur.AddOption (atth);
 
- mnllidh.SetLinkLayerIdentifier (bce_new->GetMnLinkIdentifier ());
+ mnllidh.SetLinkLayerIdentifier (bce_old->GetMnLinkIdentifier ());
  hur.AddOption (mnllidh);
 
- timestamph.SetTimestamp (bce_new->GetLastBindingUpdateTime ());
+ timestamph.SetTimestamp (bce_old->GetLastBindingUpdateTime ());
  hur.AddOption (timestamph);
 
  p->AddHeader (hur);
@@ -501,7 +501,6 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
 
                       //bce_new = m_bCache->Add (mnId);
                       bce_new=m_bCache->Add(bce->GetMnIdentifier());
-                      //bce_new = new BindingCache::Entry(m_bCache);
                       bce_new->SetProxyCoa (src);
                       bce_new->SetMnLinkIdentifier (mnLinkId);
                       bce_new->SetAccessTechnologyType (bundle.GetAccessTechnologyType ());
@@ -510,6 +509,7 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
                       bce_new->SetLastBindingUpdateTime (bundle.GetTimestamp ());
                       bce_new->SetReachableTime (Seconds (pbu.GetLifetime ()));
                       bce_new->SetLastBindingUpdateSequence (pbu.GetSequence ());
+                      bce_new->SetNext(bce);
 
                       std::list<Ipv6Address> hnpList=bce->GetHomeNetworkPrefixes();
 					  Ipv6Address prefix = m_prefixPool->Assign ();
@@ -521,13 +521,17 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
 						pf->SetHomeNetworkPrefixes (hnpList);
 					  }
 					  SetupTunnelAndRouting (bce_new);
-
 					  bce_new->MarkReachable ();
-					  bce->SetNext(bce_new);
+					  //bce->SetNext(bce_new);
 					  // start lifetime timer
 					  bce_new->StopReachableTimer ();
 					  bce_new->StartReachableTimer ();
-
+                      BindingCache::Entry *bce_iterator2=m_bCache->Lookup(bce->GetMnIdentifier());
+					  while(bce_iterator2!=0)
+					  {
+						  NS_LOG_LOGIC (bce_iterator2->GetAccessTechnologyType()<<" "<<bce_iterator2->GetNext());
+						  bce_iterator2=bce_iterator2->GetNext();
+					  }
 
                   }
                 } // PBU from another MAG.
@@ -562,7 +566,7 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
               bce->SetLastBindingUpdateTime (bundle.GetTimestamp ());
               bce->SetReachableTime (Seconds (pbu.GetLifetime ()));
               bce->SetLastBindingUpdateSequence (pbu.GetSequence ());
-              
+              bce->SetNext(0);
               // Allocate new prefix
               std::list<Ipv6Address> hnpList;
               // Assign HNP from profile if present, otherwise assign from Prefix Pool.
@@ -604,15 +608,19 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
   {
 	  //send pba with two hnp
 	  pktPba = BuildPba (bce_new, errStatus);
-	  SendMessage (pktPba, src, 64);
+
 	  //for all previous mags send hur
-	  Ptr<Packet> pktHur=BuildHur(bce_new,errStatus);
+
 	  BindingCache::Entry *bce_iterator=bce_new->GetNext();
 	  NS_LOG_LOGIC("Sending HURs to all MAGs");
-	  while(bce_iterator !=NULL && bce_iterator !=0 && !(bce_iterator->IsEqual(bce_new))){
-		  SendMessage (pktHur, bce_iterator->GetMagLinkAddress(), 64);
+	  while(bce_iterator !=NULL && bce_iterator !=0 && !(bce_iterator->IsEqual(bce_new)))
+	  {
+		  Ptr<Packet> pktHur=BuildHur(bce_new, bce_iterator,errStatus);
+		  NS_LOG_LOGIC("Hur for  "<< bce_iterator->GetProxyCoa());
+		  SendMessage (pktHur, bce_iterator->GetProxyCoa(), 64);
 		  bce_iterator=bce_iterator->GetNext();
 	  }
+	  SendMessage (pktPba, src, 64);
 	  return 0;
   }
   else
@@ -622,7 +630,50 @@ uint8_t Pmipv6Lma::HandlePbu(Ptr<Packet> packet, const Ipv6Address &src, const I
   SendMessage (pktPba, src, 64);
   return 0;
 }
+uint8_t Pmipv6Lma::HandleHua(Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface){
+	NS_LOG_FUNCTION (this << packet << src << dst << interface);
+	  Ptr<Packet> p = packet->Copy ();
+	  Ipv6MobilityBindingUpdateHeader hua;
+	  Ipv6MobilityOptionBundle bundle;
 
+	  p->RemoveHeader (hua);
+
+	  Ptr<Ipv6MobilityDemux> ipv6MobilityDemux = GetNode ()->GetObject<Ipv6MobilityDemux> ();
+	  NS_ASSERT (ipv6MobilityDemux);
+	  Ptr<Ipv6Mobility> ipv6Mobility = ipv6MobilityDemux->GetMobility (hua.GetMhType ());
+	  NS_ASSERT (ipv6Mobility);
+
+	  uint8_t length = ((hua.GetHeaderLen () + 1) << 3) - hua.GetOptionsOffset ();
+	  ipv6Mobility->ProcessOptions (packet, hua.GetOptionsOffset (), length, bundle);
+	  //option check
+	  // Error Process for Mandatory Options
+	  if (bundle.GetMnIdentifier ().IsEmpty () || bundle.GetHomeNetworkPrefixes ().size () == 0 || bundle.GetAccessTechnologyType () == Ipv6MobilityHeader::OPT_ATT_RESERVED || bundle.GetTimestamp ().GetMicroSeconds () == 0)						//bundle.GetHandoffIndicator () == Ipv6MobilityHeader::OPT_HI_RESERVED ||
+	    {
+	      NS_LOG_LOGIC ("HUA Option missing.. Ignored.");
+	      return 0;
+	    }
+	  // Check timestamp must be less than current time.
+	  if (bundle.GetTimestamp () > Simulator::Now ())
+	    {
+	      NS_LOG_LOGIC ("Timestamp is mismatched. Ignored.");
+	      return 0;
+	    }
+	  BindingCache::Entry *bule = m_bCache->Lookup (bundle.GetMnIdentifier (),bundle.GetAccessTechnologyType(),bundle.GetMnLinkIdentifier());
+	  if (bule == 0)
+	    {
+	      NS_LOG_LOGIC ("No matched HUA for HUA. Ignored.");
+	      return 0;
+	    }
+	  //ClearTunnelAndRouting(bule_new);
+	  std::list<Ipv6Address> prev_hnps=bule->GetHomeNetworkPrefixes();
+	  std::list<Ipv6Address> new_hnps=bundle.GetHomeNetworkPrefixes();
+	  		  for (std::list<Ipv6Address>::iterator iterator = new_hnps.begin(); iterator != new_hnps.end(); ++iterator)
+	  			  prev_hnps.push_back(*iterator);
+	  bule->SetHomeNetworkPrefixes (prev_hnps);
+	  //SetupLteRadvdInterface (bule);
+	  SetupTunnelAndRouting (bule);
+	return 0;
+}
 bool Pmipv6Lma::SetupTunnelAndRouting (BindingCache::Entry *bce)
 {
   NS_LOG_FUNCTION (this << bce);
@@ -630,7 +681,9 @@ bool Pmipv6Lma::SetupTunnelAndRouting (BindingCache::Entry *bce)
   // Create tunnel
   Ptr<Ipv6TunnelL4Protocol> th = GetNode ()->GetObject<Ipv6TunnelL4Protocol> ();
   NS_ASSERT (th);
+
   uint16_t tunnelIf = th->AddTunnel (bce->GetProxyCoa ());
+  NS_LOG_INFO("Tunnel Added  " << bce->GetProxyCoa () <<"  index  "<<tunnelIf);
   bce->SetTunnelIfIndex (tunnelIf);
   
   // Routing setup by static routing protocol

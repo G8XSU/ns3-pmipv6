@@ -85,7 +85,8 @@ BindingUpdateList::Entry* BindingUpdateList::Lookup (Identifier mnId)
 BindingUpdateList::Entry* BindingUpdateList::Add (Identifier mnId)
 {
   NS_LOG_FUNCTION (this << mnId );
-  NS_ASSERT( Lookup(mnId) == 0 );
+  if(Lookup(mnId) == 0)
+	  NS_ASSERT( Lookup(mnId) == 0 );
   
   BindingUpdateList::Entry* entry = new BindingUpdateList::Entry (this);
   

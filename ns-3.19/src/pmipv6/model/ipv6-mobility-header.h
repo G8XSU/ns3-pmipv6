@@ -460,6 +460,8 @@ public:
    * \param p value
    */
   void SetFlagP(bool p);
+  bool GetFlagT() const;
+  void SetFlagT(bool t);
 
   /**
    * \brief Get the Reserved value.
@@ -551,7 +553,7 @@ private:
    * \brief The P flag.
    */
   bool m_flagP;
-
+  bool m_flagT;
   /**
    * \brief The reserved value.
    */
@@ -633,13 +635,14 @@ public:
    * \return P flag
    */
   bool GetFlagP() const;
-  
+
   /**
    * \brief Set the P flag.
    * \param p value
    */
   void SetFlagP(bool p);
-
+  bool GetFlagT() const;
+  void SetFlagT(bool t);
   /**
    * \brief Get the Reserved2 field.
    * \return reserved2 value
@@ -721,11 +724,18 @@ private:
   /**
    * \brief The P flag.
    */
-  bool m_flagP;
+  /** G8XSU EDIT **/
+  bool m_flagT;
+  /**           **/
+    /**
+       * \brief The P flag.
+       */
 
+  bool m_flagP;
   /**
-   * \brief The reserved value.
-   */
+    * \brief The reserved value.
+    */
+
   uint8_t m_reserved2;
 
   /**

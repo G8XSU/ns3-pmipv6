@@ -80,7 +80,8 @@ public:
 protected:
   virtual uint8_t HandlePbu (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
   virtual uint8_t HandlePba (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
-  
+  virtual uint8_t HandleHur (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
+  virtual uint8_t HandleHua (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
   /**
    * \brief Dispose this object.
    */

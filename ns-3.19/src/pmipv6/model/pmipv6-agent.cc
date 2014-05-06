@@ -114,11 +114,25 @@ uint8_t Pmipv6Agent::Receive (Ptr<Packet> packet, const Ipv6Address &src, const 
   
   if (mhType == Ipv6MobilityHeader::IPV6_MOBILITY_BINDING_UPDATE)
     {
-      HandlePbu (packet, src, dst, interface);
+	  Ipv6MobilityBindingUpdateHeader mj;
+	  p->PeekHeader (mj);
+	  if(!(mj.GetFlagT()))
+      	HandlePbu (packet, src, dst, interface);
+	  else{
+	  		  NS_LOG_LOGIC ("Handler for HUA called");
+	  		  HandleHua(packet, src, dst, interface);
+	  	  }
     }
   else if (mhType == Ipv6MobilityHeader::IPV6_MOBILITY_BINDING_ACKNOWLEDGEMENT)
     {
-      HandlePba (packet, src, dst, interface);
+	  Ipv6MobilityBindingAckHeader mj;
+	  p->PeekHeader (mj);
+	  if(!(mj.GetFlagT()))
+		  HandlePba (packet, src, dst, interface);
+	  else{
+		  NS_LOG_LOGIC ("Handler for HUR called");
+		  HandleHur(packet, src, dst, interface);
+	  }
     }
   else
     {
@@ -169,6 +183,17 @@ uint8_t Pmipv6Agent::HandlePba (Ptr<Packet> packet, const Ipv6Address &src, cons
   NS_LOG_WARN ("No handler for PBA message");
   return 0;
 }
-
+uint8_t Pmipv6Agent::HandleHur (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface)
+{
+  NS_LOG_FUNCTION ( this << src << dst );
+  NS_LOG_WARN ("No handler for HUR message");
+  return 0;
+}
+uint8_t Pmipv6Agent::HandleHua (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface)
+{
+  NS_LOG_FUNCTION ( this << src << dst );
+  NS_LOG_WARN ("No handler for HUA message");
+  return 0;
+}
 } /* namespace ns3 */
 

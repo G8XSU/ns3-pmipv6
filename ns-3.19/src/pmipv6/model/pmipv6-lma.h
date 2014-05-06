@@ -51,8 +51,9 @@ protected:
   
   Ptr<Packet> BuildPba (BindingCache::Entry *bce, uint8_t status);
   Ptr<Packet> BuildPba (Ipv6MobilityBindingUpdateHeader pbu, Ipv6MobilityOptionBundle bundle, uint8_t status);
-  Ptr<Packet> BuildHur (BindingCache::Entry *bce_new, uint8_t status);
+  Ptr<Packet> BuildHur (BindingCache::Entry *bce_new,BindingCache::Entry *bce_old, uint8_t status);
   virtual uint8_t HandlePbu (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
+  virtual uint8_t HandleHua (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface);
   
   bool SetupTunnelAndRouting (BindingCache::Entry *bce);
   bool ModifyTunnelAndRouting (BindingCache::Entry *bce);

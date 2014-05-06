@@ -252,6 +252,7 @@ Ptr<Packet> Pmipv6Mag::BuildPbu (BindingUpdateList::Entry *bule)
   pbu.SetFlagH (true);
   pbu.SetFlagL (true);
   pbu.SetFlagP (true);
+  pbu.SetFlagT(false);
   pbu.SetLifetime ((uint16_t) Ipv6MobilityL4Protocol::MAX_BINDING_LIFETIME);
 
   // Add Mobile Node Identifier Option
@@ -308,6 +309,83 @@ Ptr<Packet> Pmipv6Mag::BuildPbu (BindingUpdateList::Entry *bule)
 
   return p;
 }
+Ptr<Packet> Pmipv6Mag::BuildHua(BindingUpdateList::Entry *bule, std::list<Ipv6Address> new_hnps)
+{
+  NS_LOG_FUNCTION("BuildHua" << bule);
+
+  Ptr<Packet> p = Create<Packet> ();
+
+  Ipv6MobilityBindingUpdateHeader hua;
+
+  Ipv6MobilityOptionMobileNodeIdentifierHeader mnidh;
+  Ipv6MobilityOptionHomeNetworkPrefixHeader hnph;
+  Ipv6MobilityOptionHandoffIndicatorHeader hih;
+  Ipv6MobilityOptionAccessTechnologyTypeHeader atth;
+  Ipv6MobilityOptionMobileNodeLinkLayerIdentifierHeader mnllidh;
+  Ipv6MobilityOptionTimestampHeader timestamph;
+
+  hua.SetSequence (bule->GetLastBindingUpdateSequence ());
+  hua.SetFlagA (true);
+  hua.SetFlagH (true);
+  hua.SetFlagL (true);
+  hua.SetFlagP (true);
+  hua.SetFlagT (true);
+  hua.SetLifetime ((uint16_t) Ipv6MobilityL4Protocol::MAX_BINDING_LIFETIME);
+
+  // Add Mobile Node Identifier Option
+  mnidh.SetSubtype (1);
+  mnidh.SetNodeIdentifier (bule->GetMnIdentifier ());
+  hua.AddOption (mnidh);
+
+  // Add Home Network Prerfix List (if it has)
+  if (new_hnps.size () > 0)
+	{
+	  for (std::list<Ipv6Address>::iterator i = new_hnps.begin (); i != new_hnps.end (); i++)
+		{
+		  hnph.SetPrefix ((*i));
+		  hnph.SetPrefixLength (64);
+		  hua.AddOption (hnph);
+		}
+	}
+  else
+	{
+	  hnph.SetPrefix (Ipv6Address::GetAny ());
+	  hnph.SetPrefixLength (0);
+	  hua.AddOption (hnph);
+	}
+
+  // Add Handoff Indicator Option
+  hih.SetHandoffIndicator (bule->GetHandoffIndicator ());
+  hua.AddOption (hih);
+
+  // Add Access Technology Type Option
+  atth.SetAccessTechnologyType (bule->GetAccessTechnologyType ());
+  hua.AddOption (atth);
+
+  // Add MobileNode Link Identifier Option
+  if (!bule->GetMnLinkIdentifier ().IsEmpty ())
+	{
+	  mnllidh.SetLinkLayerIdentifier (bule->GetMnLinkIdentifier ());
+	  hua.AddOption (mnllidh);
+	}
+
+  // Add Link Local Address Option (if available).
+  if (!bule->GetMagLinkAddress ().IsAny ())
+	{
+	  Ipv6MobilityOptionLinkLocalAddressHeader llah;
+	  llah.SetLinkLocalAddress (bule->GetMagLinkAddress ());
+	  hua.AddOption (llah);
+	}
+
+  // Add Timestamp Option
+  timestamph.SetTimestamp (bule->GetLastBindingUpdateTime ());
+  hua.AddOption (timestamph);
+
+  p->AddHeader(hua);
+
+  return p;
+}
+
 
 void Pmipv6Mag::HandleRegularNewNode (Mac48Address from, Mac48Address to, uint8_t att)
 {
@@ -338,7 +416,7 @@ void Pmipv6Mag::HandleRegularNewNode (Mac48Address from, Mac48Address to, uint8_
     }
 
   //XXX: how to determine proper HI(Handoff Indicator) value??
-  bule->SetHandoffIndicator (Ipv6MobilityHeader::OPT_NEW_ATTACHMENT); //OPT_HI_HANDOFF_STATE_UNKNOWN
+  bule->SetHandoffIndicator (Ipv6MobilityHeader::OPT_NEW_ATTACHMENT); //OPT_HI_HANDOFF_STATE_UNKNOWN  //OPT_NEW_ATTACHMENT
 
   Ipv6Address lla = GetLinkLocalAddress (bule->GetLmaAddress ());
   if (!lla.IsAny ())
@@ -490,7 +568,6 @@ uint8_t Pmipv6Mag::HandlePba (Ptr<Packet> packet, const Ipv6Address &src, const 
 
   uint8_t length = ((pba.GetHeaderLen () + 1) << 3) - pba.GetOptionsOffset ();
   ipv6Mobility->ProcessOptions (packet, pba.GetOptionsOffset (), length, bundle);
-
   //option check
   // Error Process for Mandatory Options
   if (bundle.GetMnIdentifier ().IsEmpty () ||
@@ -579,6 +656,68 @@ uint8_t Pmipv6Mag::HandlePba (Ptr<Packet> packet, const Ipv6Address &src, const 
       break;
     }
 
+  return 0;
+}
+uint8_t Pmipv6Mag::HandleHur (Ptr<Packet> packet, const Ipv6Address &src, const Ipv6Address &dst, Ptr<Ipv6Interface> interface)
+{
+  NS_LOG_FUNCTION (this << packet << src << dst << interface);
+  Ptr<Packet> p = packet->Copy ();
+  BindingUpdateList::Entry *bule_new;
+  Ipv6MobilityBindingAckHeader hur;
+  Ipv6MobilityOptionBundle bundle;
+
+  p->RemoveHeader (hur);
+
+  Ptr<Ipv6MobilityDemux> ipv6MobilityDemux = GetNode ()->GetObject<Ipv6MobilityDemux> ();
+  NS_ASSERT (ipv6MobilityDemux);
+  Ptr<Ipv6Mobility> ipv6Mobility = ipv6MobilityDemux->GetMobility (hur.GetMhType ());
+  NS_ASSERT (ipv6Mobility);
+
+  uint8_t length = ((hur.GetHeaderLen () + 1) << 3) - hur.GetOptionsOffset ();
+  ipv6Mobility->ProcessOptions (packet, hur.GetOptionsOffset (), length, bundle);
+  //option check
+  // Error Process for Mandatory Options
+  if (bundle.GetMnIdentifier ().IsEmpty () || bundle.GetHomeNetworkPrefixes ().size () == 0 || bundle.GetAccessTechnologyType () == Ipv6MobilityHeader::OPT_ATT_RESERVED || bundle.GetTimestamp ().GetMicroSeconds () == 0)						//bundle.GetHandoffIndicator () == Ipv6MobilityHeader::OPT_HI_RESERVED ||
+    {
+      NS_LOG_LOGIC ("HUR Option missing.. Ignored.");
+      return 0;
+    }
+  // Check timestamp must be less than current time.
+  if (bundle.GetTimestamp () > Simulator::Now ())
+    {
+      NS_LOG_LOGIC ("Timestamp is mismatched. Ignored.");
+      return 0;
+    }
+  BindingUpdateList::Entry *bule = m_buList->Lookup (bundle.GetMnIdentifier ());
+  if (bule == 0)
+    {
+      NS_LOG_LOGIC ("No matched HUR for HUR. Ignored.");
+      return 0;
+    }
+  std::list<Ipv6Address> new_hnps;
+  switch (hur.GetStatus ())
+    {
+    case Ipv6MobilityHeader::BA_STATUS_BINDING_UPDATE_ACCEPTED:
+    {
+	  NS_LOG_LOGIC("Adding Entry to buList");
+		  bule_new=m_buList->Lookup(bundle.GetMnIdentifier ());
+		  std::list<Ipv6Address> prev_hnps=bule_new->GetHomeNetworkPrefixes();
+		  new_hnps=bundle.GetHomeNetworkPrefixes();
+		  for (std::list<Ipv6Address>::iterator iterator = new_hnps.begin(); iterator != new_hnps.end(); ++iterator)
+			  prev_hnps.push_back(*iterator);
+		  ClearTunnelAndRouting(bule_new);
+		  bule_new->SetHomeNetworkPrefixes (prev_hnps);
+		  SetupLteRadvdInterface (bule_new);
+
+		  SetupTunnelAndRouting (bule_new);
+      break;
+    }
+    default:
+      NS_LOG_LOGIC ("Error occurred code=" << hur.GetStatus ());
+      break;
+    }
+  Ptr<Packet> pktHua=BuildHua(bule_new,new_hnps);
+  SendMessage (pktHua, src, 64);
   return 0;
 }
 
